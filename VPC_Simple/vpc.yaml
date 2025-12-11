@@ -1,3 +1,6 @@
+# aws cloudformation deploy --stack-name simple-vpc --template-file CLOUDFORMATION/VPC_Simple/vpc.yaml
+# aws cloudformation delete-stack --stack-name VPC_Simple
+
 AWSTemplateFormatVersion: '2010-09-09'
 Description:  This template deploys a VPC, with a pair of public and private subnets spread
   across two Availability Zones. It deploys an internet gateway, with a default
