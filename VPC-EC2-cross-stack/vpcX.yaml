@@ -1,39 +1,32 @@
-# aws cloudformation deploy --stack-name simple-vpc --template-file VPC_Simple/vpc.yaml
-# aws cloudformation delete-stack --stack-name VPC_Simple
+# aws cloudformation deploy --stack-name simple-vpc-x --template-file VPC-EC2-cross-stack/vpcX.yaml
+# aws cloudformation delete-stack --stack-name simple-vpc-x
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description:  This template deploys a VPC, with a pair of public and private subnets spread
-  across two Availability Zones. It deploys an internet gateway, with a default
-  route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
-  and default routes for them in the private subnets.
+Description: This template deploys a VPC with cross-stack exports for use by other stacks
 
 Parameters:
-  EnvironmentName:
+  AlexeiEnvironment:
     Description: An environment name that is prefixed to resource names
     Type: String
+    Default: SimpleVPCAlexei-XStack
 
   VpcCIDR:
-    Description: Please enter the IP range (CIDR notation) for this VPC
     Type: String
     Default: 10.192.0.0/16
 
   PublicSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
     Type: String
     Default: 10.192.10.0/24
 
   PublicSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
     Type: String
     Default: 10.192.11.0/24
 
   PrivateSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
     Type: String
     Default: 10.192.20.0/24
 
   PrivateSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
     Type: String
     Default: 10.192.21.0/24
 
@@ -46,14 +39,14 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Ref EnvironmentName
+          Value: !Sub ${AlexeiEnvironment}-vpc
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Ref EnvironmentName
+          Value: !Sub ${AlexeiEnvironment}-igw
 
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -70,7 +63,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+          Value: !Sub ${AlexeiEnvironment} Public Subnet (AZ1)
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
@@ -81,7 +74,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+          Value: !Sub ${AlexeiEnvironment} Public Subnet (AZ2)
 
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
@@ -92,7 +85,7 @@ Resources:
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+          Value: !Sub ${AlexeiEnvironment} Private Subnet (AZ1)
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
@@ -103,7 +96,7 @@ Resources:
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+          Value: !Sub ${AlexeiEnvironment} Private Subnet (AZ2)
 
   NatGateway1EIP:
     Type: AWS::EC2::EIP
@@ -135,7 +128,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Public Routes
+          Value: !Sub ${AlexeiEnvironment} Public Routes
 
   DefaultPublicRoute:
     Type: AWS::EC2::Route
@@ -157,14 +150,13 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
 
-
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+          Value: !Sub ${AlexeiEnvironment} Private Routes (AZ1)
 
   DefaultPrivateRoute1:
     Type: AWS::EC2::Route
@@ -185,7 +177,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+          Value: !Sub ${AlexeiEnvironment} Private Routes (AZ2)
 
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
@@ -203,55 +195,81 @@ Resources:
   NoIngressSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "no-ingress-sg"
       GroupDescription: "Security group with no ingress rule"
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AlexeiEnvironment} No Ingress SG
 
 Outputs:
   VPC:
     Description: A reference to the created VPC
     Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPCID'
 
   PublicSubnets:
     Description: A list of the public subnets
     Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicSubnets'
 
   PrivateSubnets:
     Description: A list of the private subnets
     Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnets'
 
   PublicSubnet1:
     Description: A reference to the public subnet in the 1st Availability Zone
     Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicSubnet1ID'
 
   PublicSubnet2:
     Description: A reference to the public subnet in the 2nd Availability Zone
     Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicSubnet2ID'
 
   PrivateSubnet1:
     Description: A reference to the private subnet in the 1st Availability Zone
     Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet1ID'
 
   PrivateSubnet2:
     Description: A reference to the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet2ID'
 
   NoIngressSecurityGroup:
     Description: Security group with no ingress rule
     Value: !Ref NoIngressSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-NoIngressSecurityGroupID'
 
   VpcCIDR:
     Description: The CIDR block of the VPC
     Value: !Ref VpcCIDR
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcCIDR'
 
   InternetGateway:
     Description: The Internet Gateway ID
     Value: !Ref InternetGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-InternetGatewayID'
 
   NatGateway1:
     Description: The NAT Gateway ID in the first Availability Zone
     Value: !Ref NatGateway1
+    Export:
+      Name: !Sub '${AWS::StackName}-NatGateway1ID'
 
   NatGateway2:
     Description: The NAT Gateway ID in the second Availability Zone
     Value: !Ref NatGateway2
+    Export:
+      Name: !Sub '${AWS::StackName}-NatGateway2ID'
