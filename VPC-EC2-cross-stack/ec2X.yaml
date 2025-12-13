@@ -22,9 +22,9 @@ Parameters:
     Description: SSM parameter name resolving to the desired AMI ID
 
   KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access
-    Type: AWS::EC2::KeyPair::KeyName
-    Default: "default"
+    Description: Name of an existing EC2 KeyPair to enable SSH access (optional)
+    Type: String
+    Default: ""
 
   GitHubUser:
     Description: GitHub username owning the repo
@@ -52,7 +52,15 @@ Parameters:
 
   NetworkStackName:
     Type: String
-    Description: The name of the CloudFormation stack that exported the network resources
+    Description: The name of the CloudFormation stack that exported the network resources (optional for nested stacks)
+   
+
+  EnvId:
+    Type: String
+    Description: Environment name tag/prefix
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, ""]]
 
 Resources:
   InstanceSecurityGroup:
@@ -76,8 +84,11 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyName
       ImageId: !Sub "{{resolve:ssm:${AmiSsmParameter}}}"
+      KeyName: !If
+        - HasKeyName
+        - !Ref KeyName
+        - !Ref AWS::NoValue
       SubnetId:
         Fn::ImportValue:
           Fn::Sub: '${NetworkStackName}-PublicSubnet1ID'
