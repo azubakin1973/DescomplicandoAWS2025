@@ -1,0 +1,137 @@
+# aws cloudformation deploy --stack-name game-2048 --template-file 2048/2048.yaml --parameter-overrides KeyName=MeuServidorWebKP
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 instance running the 2048 game from gabrielecirulli/2048 repository
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  AmiSsmParameter:
+    Type: String
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+    Description: SSM parameter name resolving to the desired AMI ID
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access (optional)
+    Type: String
+    Default: "MeuServidorWebKP"
+
+  AppPort:
+    Description: Port number for the application
+    Type: Number
+    Default: 80
+
+  DetailedMonitoring:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true","false"]
+    Description: Enable CloudWatch detailed monitoring for the instance
+
+  VolumeSize:
+    Type: Number
+    Default: 8
+  
+  VolumeType:
+    Type: String
+    Default: gp3
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID from simple-vpc stack where the instance will be launched
+    Default: vpc-0e9734c2e09742223
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public Subnet ID from simple-vpc stack where the instance will be launched
+    Default: subnet-01538da9590987193
+
+  ElasticIPAllocationId:
+    Type: String
+    Description: Allocation ID of the existing Elastic IP (eipalloc-xxxxx) to use for the instance. If provided, this IP will be permanently associated with the instance.
+    Default: ""
+
+Conditions:
+  HasElasticIP: !Not [!Equals [!Ref ElasticIPAllocationId, ""]]
+  EnableDetailedMonitoring: !Equals [!Ref DetailedMonitoring, "true"]
+
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access for 2048 game and SSH
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  Game2048Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !Sub "{{resolve:ssm:${AmiSsmParameter}}}"
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      Monitoring: !If [EnableDetailedMonitoring, true, false]
+      Tags:
+        - Key: Name
+          Value: Game-2048-Alexei
+        - Key: UserDataVersion
+          Value: "v2-fixed-port80"
+      BlockDeviceMappings:
+      - DeviceName: /dev/xvda
+        Ebs:
+          VolumeSize: !Ref VolumeSize
+          VolumeType: !Ref VolumeType
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          # Atualizar sistema e instalar dependências básicas
+          yum update -y
+          yum install -y git python3
+          cd /home/ec2-user
+          git clone https://github.com/gabrielecirulli/2048.git
+          cd 2048
+          chown -R ec2-user:ec2-user /home/ec2-user/2048
+          
+          # Iniciar servidor Python na porta 80 com privilégios de root
+          # A porta 80 requer privilégios de administrador
+          nohup sudo python3 -m http.server 80 --bind 0.0.0.0 > /var/log/game2048.log 2>&1 &
+          
+          # Verificar se o servidor iniciou corretamente
+          sleep 5
+          if pgrep -f "python3 -m http.server 80" > /dev/null; then
+            echo "Servidor iniciado com sucesso na porta 80" >> /var/log/game2048.log
+          else
+            echo "ERRO: Servidor não iniciou" >> /var/log/game2048.log
+          fi
+
+  ElasticIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Condition: HasElasticIP
+    Properties:
+      InstanceId: !Ref Game2048Instance
+      AllocationId: !Ref ElasticIPAllocationId
+
+Outputs:
+  InstancePublicIP:
+    Description: Public IP of the EC2 instance (Elastic IP if configured)
+    Value: !GetAtt Game2048Instance.PublicIp
+  ElasticIP:
+    Description: Elastic IP address (3.144.95.224) - this IP will not change
+    Condition: HasElasticIP
+    Value: !GetAtt Game2048Instance.PublicIp
+  WebURL:
+    Description: URL to access the 2048 game
+    Value: !Sub "http://${Game2048Instance.PublicIp}/"

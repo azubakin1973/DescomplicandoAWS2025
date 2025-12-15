@@ -22,9 +22,9 @@ Parameters:
     Description: SSM parameter name resolving to the desired AMI ID
 
   KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access
-    Type: AWS::EC2::KeyPair::KeyName
-    Default: "default"
+    Description: Name of an existing EC2 KeyPair to enable SSH access (optional)
+    Type: String
+    Default: "MeuServidorWebKP"
 
   GitHubUser:
     Description: GitHub username owning the repo
@@ -35,6 +35,26 @@ Parameters:
     Description: GitHub repository name
     Type: String
     Default: "DescomplicandoAWS2025"
+
+  GitHubBranch:
+    Description: GitHub branch to clone
+    Type: String
+    Default: "main"
+
+  RepoPath:
+    Description: Path within the repository to the application directory (leave empty for root)
+    Type: String
+    Default: ""
+
+  RunCommand:
+    Description: Command to run the application (e.g., 'python3 app.py', 'npm start', './run.sh')
+    Type: String
+    Default: "python3 -m http.server 80 --bind 0.0.0.0"
+
+  AppPort:
+    Description: Port number for the application
+    Type: Number
+    Default: 80
 
   DetailedMonitoring:
     Type: String
@@ -50,15 +70,29 @@ Parameters:
     Type: String
     Default: gp3
 
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the instance will be launched
+    Default: vpc-0e9734c2e09742223
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet ID where the instance will be launched
+    Default: subnet-01538da9590987193
+
+Conditions:
+  EnableDetailedMonitoring: !Equals [!Ref DetailedMonitoring, "true"]
+
 Resources:
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable HTTP and SSH access
+      GroupDescription: Enable application and SSH access
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 22
@@ -71,9 +105,10 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       ImageId: !Sub "{{resolve:ssm:${AmiSsmParameter}}}"
+      SubnetId: !Ref SubnetId
       SecurityGroupIds:
         - !Ref InstanceSecurityGroup
-      Monitoring: !Ref DetailedMonitoring
+      Monitoring: !If [EnableDetailedMonitoring, true, false]
       Tags:
         - Key: Name
           Value: Simple_Alexei
@@ -85,6 +120,9 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
+          set -e
+          
+          # Atualizar sistema e instalar dependências básicas
           yum update -y
           yum install -y unzip python3 wget
           cd /home/ec2-user

@@ -11,6 +11,7 @@ Parameters:
   EnvironmentName:
     Description: An environment name that is prefixed to resource names
     Type: String
+    Default: simple-vpc
 
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this VPC
