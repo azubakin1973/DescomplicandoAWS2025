@@ -47,13 +47,7 @@ Parameters:
     Description: Public Subnet ID from simple-vpc stack where the instance will be launched
     Default: subnet-01538da9590987193
 
-  ElasticIPAllocationId:
-    Type: String
-    Description: Allocation ID of the existing Elastic IP (eipalloc-xxxxx) to use for the instance. If provided, this IP will be permanently associated with the instance.
-    Default: ""
-
 Conditions:
-  HasElasticIP: !Not [!Equals [!Ref ElasticIPAllocationId, ""]]
   EnableDetailedMonitoring: !Equals [!Ref DetailedMonitoring, "true"]
 
 Resources:
@@ -108,29 +102,10 @@ Resources:
           # Iniciar servidor Python na porta 80 com privilégios de root
           # A porta 80 requer privilégios de administrador
           nohup sudo python3 -m http.server 80 --bind 0.0.0.0 > /var/log/game2048.log 2>&1 &
-          
-          # Verificar se o servidor iniciou corretamente
-          sleep 5
-          if pgrep -f "python3 -m http.server 80" > /dev/null; then
-            echo "Servidor iniciado com sucesso na porta 80" >> /var/log/game2048.log
-          else
-            echo "ERRO: Servidor não iniciou" >> /var/log/game2048.log
-          fi
-
-  ElasticIPAssociation:
-    Type: AWS::EC2::EIPAssociation
-    Condition: HasElasticIP
-    Properties:
-      InstanceId: !Ref Game2048Instance
-      AllocationId: !Ref ElasticIPAllocationId
 
 Outputs:
   InstancePublicIP:
-    Description: Public IP of the EC2 instance (Elastic IP if configured)
-    Value: !GetAtt Game2048Instance.PublicIp
-  ElasticIP:
-    Description: Elastic IP address (3.144.95.224) - this IP will not change
-    Condition: HasElasticIP
+    Description: Public IP of the EC2 instance
     Value: !GetAtt Game2048Instance.PublicIp
   WebURL:
     Description: URL to access the 2048 game
