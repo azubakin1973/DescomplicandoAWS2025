@@ -1,0 +1,141 @@
+# KEYPAIR_NAME="project-keypair"
+# aws ec2 create-key-pair --key-name $KEYPAIR_NAME --query "KeyMaterial" --output text > $HOME/$KEYPAIR_NAME.pem
+
+# aws cloudformation deploy --stack-name simple-ec2-alexei --template-file EC2_Simple\ec2.yaml --parameter-overrides KeyName=$KEYPAIR_NAME
+# PUBLIC_IP=$(aws cloudformation describe-stacks --stack-name simple-ec2-alexei --query "Stacks[0].Outputs[?OutputKey=='InstancePublicIP'].OutputValue" --output text)
+
+# echo "http://$PUBLIC_IP"
+# time curl "http://${PUBLIC_IP}/tuna-1.png" -o /dev/null
+# time ab -k -r -n 1024 -c 16 "http://${PUBLIC_IP}/tuna-1.png"
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 instance running a Python HTTP server
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  AmiSsmParameter:
+    Type: String
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+    Description: SSM parameter name resolving to the desired AMI ID
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access (optional)
+    Type: String
+    Default: "MeuServidorWebKP"
+
+  GitHubUser:
+    Description: GitHub username owning the repo
+    Type: String
+    Default: "azubakin1973"
+
+  GitHubRepo:
+    Description: GitHub repository name
+    Type: String
+    Default: "DescomplicandoAWS2025"
+
+  GitHubBranch:
+    Description: GitHub branch to clone
+    Type: String
+    Default: "main"
+
+  RepoPath:
+    Description: Path within the repository to the application directory (leave empty for root)
+    Type: String
+    Default: ""
+
+  RunCommand:
+    Description: Command to run the application (e.g., 'python3 app.py', 'npm start', './run.sh')
+    Type: String
+    Default: "python3 -m http.server 80 --bind 0.0.0.0"
+
+  AppPort:
+    Description: Port number for the application
+    Type: Number
+    Default: 80
+
+  DetailedMonitoring:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true","false"]
+    Description: Enable CloudWatch detailed monitoring for the instance
+
+  VolumeSize:
+    Type: Number
+    Default: 8
+  
+  VolumeType:
+    Type: String
+    Default: gp3
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the instance will be launched
+    Default: vpc-0e9734c2e09742223
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet ID where the instance will be launched
+    Default: subnet-01538da9590987193
+
+Conditions:
+  EnableDetailedMonitoring: !Equals [!Ref DetailedMonitoring, "true"]
+
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable application and SSH access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  SimplePythonServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !Sub "{{resolve:ssm:${AmiSsmParameter}}}"
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      Monitoring: !If [EnableDetailedMonitoring, true, false]
+      Tags:
+        - Key: Name
+          Value: Simple_Alexei
+      BlockDeviceMappings:
+      - DeviceName: /dev/xvda
+        Ebs:
+          VolumeSize: !Ref VolumeSize
+          VolumeType: !Ref VolumeType
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          # Atualizar sistema e instalar dependências básicas
+          yum update -y
+          yum install -y unzip python3 wget
+          cd /home/ec2-user
+          wget https://github.com/${GitHubUser}/${GitHubRepo}/archive/refs/heads/main.zip -O repo.zip
+          unzip repo.zip
+          cd ${GitHubRepo}-main/html/simple-html/
+          chown -R ec2-user:ec2-user /home/ec2-user/
+          nohup python3 -m http.server 80 --bind 0.0.0.0 &
+
+Outputs:
+  InstancePublicIP:
+    Description: Public IP of the EC2 instance
+    Value: !GetAtt SimplePythonServer.PublicIp
+  WebURL:
+    Description: URL to access the web server
+    Value: !Sub "http://${SimplePythonServer.PublicDnsName}/"

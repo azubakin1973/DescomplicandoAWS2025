@@ -1,0 +1,17 @@
+#aws cloudformation create-stack --stack-name infra-backend --template-body file://template.yaml
+#aws cloudformation deploy --stack-name infra-backend --template-file S3-infra-backend\template.yaml
+#export BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name infra-backend --query "Stacks[0].Outputs[?OutputKey=='InfraBackendBucketName'].OutputValue" --output text)
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: S3 bucket for CloudFormation templates backend storage
+
+Resources:
+  InfraBackendBucket:
+    Type: AWS::S3::Bucket
+    
+
+Outputs:
+  InfraBackendBucketName:
+    Description: Name of the S3 bucket for CloudFormation templates
+    Value: !Ref InfraBackendBucket
+    
