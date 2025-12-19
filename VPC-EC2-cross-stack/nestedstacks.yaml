@@ -1,0 +1,51 @@
+# aws cloudformation package --template-file VPC-EC2-cross-stack/nestedstacks.yaml --s3-bucket infra-backend-infrabackendbucket-f1f3dahhukfo --output-template-file VPC-EC2-cross-stack/packaged.yaml
+# aws cloudformation deploy --stack-name nested-stack --template-file VPC-EC2-cross-stack/packaged.yaml
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested stack for VPC and EC2 deployment
+
+
+Parameters:
+  EnvId:
+    Type: String
+    Default: SimpleVPCAlexei-XStack
+    Description: Environment name tag/prefix
+
+  KeyName:
+    Type: String
+    Default: ""
+    Description: Name of an existing EC2 KeyPair to enable SSH access (optional)
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./vpcX.yaml
+      Parameters:
+        AlexeiEnvironment: !Ref EnvId
+
+  EC2Stack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: VPCStack
+    Properties:
+      TemplateURL: ./ec2X.yaml
+      Parameters:
+        EnvId: !Ref EnvId
+        NetworkStackName: !Ref EnvId
+        KeyName: !Ref KeyName
+      
+        
+
+Outputs:
+  VPCID:
+    Description: VPC ID
+    Value: !GetAtt VPCStack.Outputs.VPC
+
+  InstancePublicIP:
+    Description: EC2 public IP
+    Value: !GetAtt EC2Stack.Outputs.InstancePublicIP
+
+  WebURL:
+    Description: Web URL
+    Value: !GetAtt EC2Stack.Outputs.WebURL
